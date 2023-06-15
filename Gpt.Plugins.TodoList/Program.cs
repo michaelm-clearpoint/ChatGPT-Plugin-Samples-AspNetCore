@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using Microsoft.OpenApi.Writers;
+using Swashbuckle.AspNetCore.Swagger;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -69,7 +71,10 @@ app.MapDelete(
    .WithName("DeleteTodo")
    .WithOpenApi();
 
-app.MapGet(pattern: "/logo.png", () => Results.File(path: "logo.png", contentType: "image/png"))
+app.MapGet(pattern: "/.well-known/logo.png", async (context) => {
+    var filePath = Path.Combine(Directory.GetCurrentDirectory(), "Resources", "logo.png");
+    await context.Response.SendFileAsync(filePath, CancellationToken.None);
+})
    .WithName("PluginLogo")
    .WithOpenApi();
 
@@ -78,7 +83,7 @@ app.MapGet(
         async context =>
         {
             string host = context.Request.Host.ToString();
-            string text = await File.ReadAllTextAsync("manifest.json");
+            string text = await File.ReadAllTextAsync("Resources\\manifest.json");
             text = text.Replace(oldValue: "PLUGIN_HOSTNAME", $"https://{host}");
             context.Response.ContentType = "application/json";
             await context.Response.WriteAsync(text);
@@ -87,14 +92,20 @@ app.MapGet(
    .WithOpenApi();
 
 app.MapGet(
-        pattern: "/openapi.yaml",
+        pattern: "/.well-known/openapi.yaml",
         async context =>
         {
             string host = context.Request.Host.ToString();
-            string text = await File.ReadAllTextAsync("openapi.yaml");
-            text = text.Replace(oldValue: "PLUGIN_HOSTNAME", $"https://{host}");
+            // string text = await File.ReadAllTextAsync("openapi.yaml");
+            // text = text.Replace(oldValue: "PLUGIN_HOSTNAME", $"https://{host}");
+            var swaggerProvider = app.Services.GetRequiredService<ISwaggerProvider>();
+            var swagger = swaggerProvider.GetSwagger("v1");
+            var stringWriter = new StringWriter();
+            swagger.SerializeAsV3(new OpenApiYamlWriter(stringWriter));
+            var swaggerYaml = stringWriter.ToString();
+
             context.Response.ContentType = "text/yaml";
-            await context.Response.WriteAsync(text);
+            await context.Response.WriteAsync(swaggerYaml);
         })
    .WithName("OpenApiSpec")
    .WithOpenApi();
